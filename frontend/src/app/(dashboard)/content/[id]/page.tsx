@@ -1,0 +1,180 @@
+"use client";
+import { useState } from "react";
+import { useParams, useRouter } from "next/navigation";
+import useSWR from "swr";
+import { contentApi, seoApi } from "@/lib/api";
+import { STATUS_COLORS, CONTENT_TYPE_LABELS, formatDate } from "@/lib/utils";
+import { ArrowLeft, Save, ChevronRight, BarChart2 } from "lucide-react";
+
+const NEXT_STATUS: Record<string, string | null> = {
+  idea: "draft",
+  draft: "review",
+  review: "approved",
+  approved: "scheduled",
+  scheduled: "published",
+  published: null,
+};
+
+export default function ContentDetailPage() {
+  const { id } = useParams() as { id: string };
+  const router = useRouter();
+  const { data: item, mutate, isLoading } = useSWR(
+    id ? `content/${id}` : null,
+    () => contentApi.get(id).then((r) => r.data)
+  );
+  const [body, setBody] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [transitioning, setTransitioning] = useState(false);
+  const [seoResult, setSeoResult] = useState<any>(null);
+
+  if (isLoading) return <div className="p-8 text-gray-400">Loading...</div>;
+  if (!item) return <div className="p-8 text-gray-400">Content not found</div>;
+
+  const currentBody = body ?? item.body ?? "";
+  const nextStatus = NEXT_STATUS[item.status];
+
+  const handleSave = async () => {
+    setSaving(true);
+    await contentApi.update(id, { body: currentBody });
+    await mutate();
+    setSaving(false);
+  };
+
+  const handleTransition = async () => {
+    if (!nextStatus) return;
+    setTransitioning(true);
+    await contentApi.transition(id, nextStatus);
+    await mutate();
+    setTransitioning(false);
+  };
+
+  const handleAnalyzeSEO = async () => {
+    const keywords = item.keywords || [];
+    const res = await seoApi.analyze(currentBody, keywords);
+    setSeoResult(res.data);
+  };
+
+  return (
+    <div className="h-full flex flex-col">
+      {/* Top bar */}
+      <div className="flex items-center justify-between px-8 py-4 border-b border-gray-100 bg-white">
+        <div className="flex items-center gap-4">
+          <button onClick={() => router.push("/content")} className="text-gray-400 hover:text-gray-600">
+            <ArrowLeft size={18} />
+          </button>
+          <div>
+            <h1 className="font-semibold text-gray-900 text-sm">{item.title || "(Untitled)"}</h1>
+            <div className="flex items-center gap-2 mt-0.5">
+              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[item.status]}`}>
+                {item.status}
+              </span>
+              <span className="text-xs text-gray-400">{CONTENT_TYPE_LABELS[item.content_type]}</span>
+              <span className="text-xs text-gray-400">{item.word_count} words</span>
+              <span className="text-xs text-gray-400">Updated {formatDate(item.updated_at)}</span>
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleSave}
+            disabled={saving || body === null}
+            className="flex items-center gap-2 bg-white border border-gray-200 hover:border-gray-300 px-3 py-1.5 rounded-lg text-sm font-medium text-gray-700 disabled:opacity-40"
+          >
+            <Save size={14} />
+            {saving ? "Saving..." : "Save"}
+          </button>
+          {nextStatus && (
+            <button
+              onClick={handleTransition}
+              disabled={transitioning}
+              className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-sm font-medium"
+            >
+              {transitioning ? "Moving..." : `Move to ${nextStatus}`}
+              <ChevronRight size={14} />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Editor + sidebar */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Main editor */}
+        <div className="flex-1 overflow-auto p-8">
+          <textarea
+            className="w-full h-full min-h-[600px] text-sm text-gray-800 leading-relaxed border-0 outline-none resize-none bg-transparent font-mono"
+            value={currentBody}
+            onChange={(e) => setBody(e.target.value)}
+            placeholder="Content will appear here after generation..."
+          />
+        </div>
+
+        {/* Sidebar */}
+        <div className="w-64 border-l border-gray-100 bg-white overflow-auto p-4 space-y-5">
+          {/* Metadata */}
+          <div>
+            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Details</h3>
+            <div className="space-y-2 text-xs text-gray-600">
+              {item.tone && <div className="flex justify-between"><span>Tone</span><span className="capitalize">{item.tone}</span></div>}
+              {item.platform && <div className="flex justify-between"><span>Platform</span><span className="capitalize">{item.platform}</span></div>}
+              {item.agent_type && <div className="flex justify-between"><span>Generated by</span><span>{item.agent_type}</span></div>}
+            </div>
+          </div>
+
+          {/* Keywords */}
+          {item.keywords?.length > 0 && (
+            <div>
+              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Keywords</h3>
+              <div className="flex flex-wrap gap-1">
+                {item.keywords.map((kw: string) => (
+                  <span key={kw} className="text-xs bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded">{kw}</span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* SEO Analysis */}
+          <div>
+            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">SEO Analysis</h3>
+            <button
+              onClick={handleAnalyzeSEO}
+              className="w-full flex items-center gap-2 text-xs bg-gray-50 hover:bg-gray-100 border border-gray-200 px-3 py-2 rounded-lg text-gray-600"
+            >
+              <BarChart2 size={12} />
+              Analyze SEO
+            </button>
+            {seoResult && (
+              <div className="mt-3 space-y-2 text-xs">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Readability</span>
+                  <span className={`font-medium ${seoResult.readability_score >= 70 ? "text-green-600" : seoResult.readability_score >= 50 ? "text-yellow-600" : "text-red-600"}`}>
+                    {seoResult.reading_ease} ({seoResult.readability_score})
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Words</span>
+                  <span>{seoResult.word_count}</span>
+                </div>
+                {seoResult.suggestions?.length > 0 && (
+                  <div className="mt-2">
+                    <div className="text-gray-400 mb-1">Suggestions</div>
+                    {seoResult.suggestions.map((s: string, i: number) => (
+                      <div key={i} className="text-gray-600 text-xs py-0.5">• {s}</div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Meta description */}
+          {item.meta_description && (
+            <div>
+              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Meta Description</h3>
+              <p className="text-xs text-gray-600">{item.meta_description}</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
