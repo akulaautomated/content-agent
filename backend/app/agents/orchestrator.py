@@ -12,8 +12,15 @@ class AgentOrchestrator:
     """Manages agent routing and execution."""
 
     def __init__(self):
-        self.client = AsyncOpenAI(api_key=settings.openai_api_key)
+        self._client = None
         self.model = settings.llm_model
+
+    @property
+    def client(self):
+        """Lazy-load the OpenAI client on first access."""
+        if self._client is None:
+            self._client = AsyncOpenAI(api_key=settings.openai_api_key)
+        return self._client
 
     async def generate(self, agent_type: str, task: str, context: dict = None):
         """
