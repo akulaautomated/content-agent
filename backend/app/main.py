@@ -60,7 +60,12 @@ if agentalent is not None:
 
 @app.get("/api/health")
 async def health():
-    return {"status": "ok", "llm_provider": settings.llm_provider, "model": settings.llm_model}
+    return {
+        "status": "ok",
+        "llm_provider": settings.llm_provider,
+        "model": settings.llm_model,
+        "agentalent_available": True,
+    }
 
 
 # ─── Agentalent Sensei Handshake Endpoints ───────────────────────────────────
