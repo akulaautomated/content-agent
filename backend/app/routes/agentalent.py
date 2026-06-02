@@ -7,21 +7,9 @@ and receiving scored responses.
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 import time
+import json
 
 router = APIRouter()
-
-# Import orchestrator lazily to avoid blocking route registration
-orchestrator = None
-
-def get_orchestrator():
-    global orchestrator
-    if orchestrator is None:
-        try:
-            from app.agents.orchestrator import orchestrator as orch
-            orchestrator = orch
-        except Exception as e:
-            raise RuntimeError(f"Failed to load orchestrator: {str(e)}")
-    return orchestrator
 
 
 class HandshakeTask(BaseModel):
@@ -37,7 +25,26 @@ class HandshakeResponse(BaseModel):
     metadata: dict = {}
 
 
-@router.post("/api/agentalent/evaluate")
+@router.post("/api/agentalent/health")
+async def agentalent_health():
+    """Health check for Agentalent evaluation system."""
+    return {
+        "status": "healthy",
+        "agent": "ContentAgent",
+        "api_version": "1.0.0",
+        "llm_model": "gpt-4o",
+        "capabilities": [
+            "blog_post",
+            "email",
+            "social_post",
+            "ad_copy",
+            "landing_page",
+            "case_study",
+        ],
+    }
+
+
+@router.post("/api/agentalent/evaluate", response_model=HandshakeResponse)
 async def evaluate_task(task: HandshakeTask):
     """
     Agentalent sends a task prompt.
@@ -45,7 +52,8 @@ async def evaluate_task(task: HandshakeTask):
     Returns the generated content for Sensei to score.
     """
     try:
-        orch = get_orchestrator()
+        # Import orchestrator lazily
+        from app.agents.orchestrator import orchestrator
 
         # Map task_type to content_type and agent
         task_type_mapping = {
@@ -62,7 +70,7 @@ async def evaluate_task(task: HandshakeTask):
         # Generate content using the orchestrator
         start_time = time.time()
 
-        result = await orch.generate(
+        result = await orchestrator.generate(
             agent_type="blog_writer" if content_type == "blog_post" else content_type,
             task=task.prompt,
             context={
@@ -93,22 +101,3 @@ async def evaluate_task(task: HandshakeTask):
             status_code=500,
             detail=f"Error processing handshake task: {str(e)}",
         )
-
-
-@router.post("/api/agentalent/health")
-async def agentalent_health():
-    """Health check for Agentalent evaluation system."""
-    return {
-        "status": "healthy",
-        "agent": "ContentAgent",
-        "api_version": "1.0.0",
-        "llm_model": "gpt-4o",
-        "capabilities": [
-            "blog_post",
-            "email",
-            "social_post",
-            "ad_copy",
-            "landing_page",
-            "case_study",
-        ],
-    }
