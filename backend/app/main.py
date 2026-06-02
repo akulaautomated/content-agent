@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 import redis.asyncio as aioredis
 
 from app.config import settings
@@ -70,6 +71,13 @@ async def health():
 
 # ─── Agentalent Sensei Handshake Endpoints ───────────────────────────────────
 
+class EvaluateRequest(BaseModel):
+    task_id: str
+    task_type: str
+    prompt: str
+    requirements: dict = {}
+
+
 @app.post("/api/agentalent/health")
 async def agentalent_health():
     """Health check for Agentalent evaluation system."""
@@ -90,7 +98,7 @@ async def agentalent_health():
 
 
 @app.post("/api/agentalent/evaluate")
-async def agentalent_evaluate(request: dict):
+async def agentalent_evaluate(request: EvaluateRequest):
     """
     Agentalent sends a task prompt.
     ContentAgent generates a response.
@@ -100,9 +108,9 @@ async def agentalent_evaluate(request: dict):
         from app.agents.orchestrator import orchestrator
         import time
 
-        task_id = request.get("task_id", "unknown")
-        task_type = request.get("task_type", "blog")
-        prompt = request.get("prompt", "")
+        task_id = request.task_id
+        task_type = request.task_type
+        prompt = request.prompt
 
         # Map task_type to agent
         task_type_mapping = {
