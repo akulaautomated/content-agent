@@ -61,3 +61,73 @@ if agentalent is not None:
 @app.get("/api/health")
 async def health():
     return {"status": "ok", "llm_provider": settings.llm_provider, "model": settings.llm_model}
+
+
+# ─── Agentalent Sensei Handshake Endpoints ───────────────────────────────────
+
+@app.post("/api/agentalent/health")
+async def agentalent_health():
+    """Health check for Agentalent evaluation system."""
+    return {
+        "status": "healthy",
+        "agent": "ContentAgent",
+        "api_version": "1.0.0",
+        "llm_model": "gpt-4o",
+        "capabilities": [
+            "blog_post",
+            "email",
+            "social_post",
+            "ad_copy",
+            "landing_page",
+            "case_study",
+        ],
+    }
+
+
+@app.post("/api/agentalent/evaluate")
+async def agentalent_evaluate(request: dict):
+    """
+    Agentalent sends a task prompt.
+    ContentAgent generates a response.
+    Returns the generated content for Sensei to score.
+    """
+    try:
+        from app.agents.orchestrator import orchestrator
+        import time
+
+        task_id = request.get("task_id", "unknown")
+        task_type = request.get("task_type", "blog")
+        prompt = request.get("prompt", "")
+
+        # Map task_type to agent
+        task_type_mapping = {
+            "blog": "blog_writer",
+            "email": "email",
+            "social": "social_post",
+            "ad": "ad_copy",
+            "landing_page": "landing_page",
+            "case_study": "case_study",
+        }
+
+        agent_type = task_type_mapping.get(task_type, "blog_writer")
+
+        # Generate content
+        start_time = time.time()
+        result = await orchestrator.generate(
+            agent_type=agent_type,
+            task=prompt,
+            context={"org_id": "agentalent-eval", "brand_id": None},
+        )
+        latency_ms = int((time.time() - start_time) * 1000)
+
+        return {
+            "task_id": task_id,
+            "response": result.get("result", ""),
+            "metadata": {
+                "latency_ms": latency_ms,
+                "tokens_used": result.get("tokens_used", 0),
+                "model": "gpt-4o",
+            },
+        }
+    except Exception as e:
+        return {"error": str(e)}, 500
