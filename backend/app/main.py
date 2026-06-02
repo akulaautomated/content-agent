@@ -10,6 +10,13 @@ from app.models import Base
 # Import all route modules
 from app.routes import auth, brands, campaigns, content, calendar, seo, analytics
 
+# Import agentalent with error handling
+try:
+    from app.routes import agentalent
+except Exception as e:
+    print(f"⚠️  Warning: Failed to import agentalent routes: {str(e)}")
+    agentalent = None
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -47,6 +54,8 @@ app.include_router(content.router, prefix="/api/content", tags=["Content"])
 app.include_router(calendar.router, prefix="/api/calendar", tags=["Calendar"])
 app.include_router(seo.router, prefix="/api/seo", tags=["SEO"])
 app.include_router(analytics.router, prefix="/api/analytics", tags=["Analytics"])
+if agentalent is not None:
+    app.include_router(agentalent.router, prefix="", tags=["Agentalent"])
 
 
 @app.get("/api/health")
